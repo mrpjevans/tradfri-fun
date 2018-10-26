@@ -1,10 +1,11 @@
 '''
-brighten.py
+watch_light.py
 pj@mrpjevans.com
 
+Simple script to monitor the status of a Trådfri smart light.
+A background thread polls the gateway for the light status and
+displays any changes.
 Based in part on code from: https://github.com/ggravlingen/pytradfri/
-
-Simply sets you light to minimum dimness then slowly brightens to max.
 
 Make you you update the IP address to match your gateway's and
 run $ python3 -i -m pytradfri IP to (re)create your
@@ -15,6 +16,7 @@ from pytradfri import Gateway
 from pytradfri.api.libcoap_api import APIFactory
 from pytradfri.util import load_json, save_json
 from time import sleep
+import threading
 
 # Change this IP address to your gateway
 IP_ADDRESS = '192.168.0.158'
@@ -38,9 +40,23 @@ devices = api(devices_commands)
 # Create an array of objects that are lights
 lights = [dev for dev in devices if dev.has_light_control]
 
-# Brightness ranges from 0 to 254, so lets set the light in stages of 5
-for brightness in range(0, 255, 5):
 
-    # Set the first light to 'brightness' and then pause for a moment
-    api(lights[0].light_control.set_dimmer(brightness))
-    sleep(0.1)
+def observe(api, device):
+    def callback(updated_device):
+        light = updated_device.light_control.lights[0]
+        print("Received message for: %s" % light)
+
+    def err_callback(err):
+        print(err)
+
+    def worker():
+        api(device.observe(callback, err_callback, duration=120))
+
+    threading.Thread(target=worker, daemon=True).start()
+    print('Sleeping to start observation task')
+    sleep(1)
+
+observe(api, lights[0])
+
+while(True):
+    sleep(0.01)
